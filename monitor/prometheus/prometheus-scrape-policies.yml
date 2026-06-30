@@ -1,0 +1,188 @@
+# 주기, 타임아웃, 대상 추가 및 제거 등 정책과 관련된 파일
+groups:
+  - name: health
+    rules:
+      - alert: ServiceDown
+        expr: up{job="moni-health"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.application }} 서비스 다운 상태"
+
+  - name: signals
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum by (application) (
+            rate(http_server_requests_seconds_count{
+              job="moni-errors",
+              status=~"5.."
+            }[5m])
+          )
+          /
+          sum by (application) (
+            rate(http_server_requests_seconds_count{
+              job="moni-errors"
+            }[5m])
+          ) * 100 > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.application }} 에러율 {{ $value | humanize }}%"
+
+      - alert: HighLantency
+        expr: |
+          histogram_quantile(0.99,
+            sum by(application, le) (
+              rate(http_server_requests_seconds_bucker{
+                job="moni-latency"
+              }[5m])
+            )
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.application }} p99 레이턴시 {{ $valdue | humanize }}%"
+
+      - alert: DBConnectionPoolExhausted
+        expr:
+          hikaricp_connections_pending{job="moni-signals"} > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.application }} DB 커넥션 풀 대기 발생"
+
+  - name:
+    - rules:
+        - alert: JvmHeapHigh
+          expr: |
+            jvm_memory_used_bytes{job="moni-jvm", area="heap"}
+            /
+            jvm_memory_max_bytes{job="moni-jvm", area="heap"}
+            * 100 > 80
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.application }} JVM Heap  {{ $value | humanize }}% "
+
+        - alert: HighCpuUsage
+          expr: |
+            process_cpu_usage{job="moni-jvm"} * 100 > 50
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.application }} CPU {{ $vlaue | humanize }}%"
+
+  - name: infraEc2
+    rules:
+      - alert: HighCpuUsage
+        expr: |
+          100 - (avg by (instance_name) (
+            rate(node_cpu_seconds_total{
+              job="node-exporter",
+              mode="idle"
+            }[5m])
+          ) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance_name }} CPU {{ $vlaue | humanize }}%"
+
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            node_memory_MemTotal_bytes{job="node-exporter"}
+            - node_memory_MemAvailable_bytes{job="node-exporter"}
+          )
+          / node_memory_MemTotal_bytes{job="node-exporter"}
+          * 100 > 85
+        for: 5m
+        labels:
+          severity: warngin
+        annotations:
+          summary: "{{ $labels.instance_name }} 메모리 {{ $value | humanize }}%"
+
+      - alert: DisckSpaceLow
+        expr: |
+          node_filesystem_avail_bytes{
+            job="node-exporter",
+            mountpoint="/"
+          }
+          / node_filesystem_size_bytes{
+            job="node-exporter",
+            mountpoint="/"
+          }
+          * 100 < 20
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance_name }} 디스크 여유 {{ $value | humanize }}%"
+
+  - name: kafka
+    rules:
+      - alert: KafkaConsumerLagHigh
+        expr: |
+          kafka_consumergroup_lag_sum{job="kafka"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.topic }} Consumer Lag {{ $value }}"
+
+      - alert: KafkaConsumerLagCritical
+        expr: |
+          kafka_consumergroup_lag_sum{job="kafka"} > 10000
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.topic }} Consumer Lag 위험 {{ $value }}"
+
+  - name: postgresql
+    rules:
+      - alert: PgConnectionHigh
+        expr: |
+          sum by (datname) (
+            pg_stat_activity_count{job="postgresql"}
+          )
+          /
+          pg_settings_max_connections{job="postgresql"}
+          * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB {{ $labels.datname }} 커넥션 {{ $value | humanize }}%"
+
+      - alert: PgDeadlockDetected
+        expr: |
+          increase(
+            pg_stat_database_deadlocks{job="postgresql"}[5m]
+          ) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB {{ $labels.datname }} 데드락 발생"
+
+      - alert: PgCacheHitRateLow
+        expr: |
+          pg_stat_database_blks_hit{job="postgresql"}
+          /
+          (
+            pg_stat_database_blks_hit{job="postgresql"}
+            + pg_stat_database_blks_read{job="postgresql"}
+          ) * 100 < 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB {{ $labels.datname }} 캐시 히트율 {{ $value | humanize }}%"

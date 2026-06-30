@@ -1,0 +1,428 @@
+{
+  "title": "Service Detail",
+  "uid": "moni-service-detail",
+  "tags": ["services"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "application",
+        "label": "서비스",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(up{job=\"moni-health\"}, application)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "서비스 상태",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": {
+              "0": { "text": "DOWN", "color": "red" },
+              "1": { "text": "UP", "color": "green" }
+            }}
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "up{job=\"moni-health\", application=\"$application\"}",
+          "legendFormat": "상태",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "에러율",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"moni-signals\",application=\"$application\",status=~\"5..\"}[5m])) / sum(rate(http_server_requests_seconds_count{job=\"moni-signals\",application=\"$application\"}[5m])) * 100",
+          "legendFormat": "에러율",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "p99 레이턴시",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 1.0 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"moni-signals\",application=\"$application\"}[5m])))",
+          "legendFormat": "p99",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "RPS",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"moni-signals\",application=\"$application\"}[5m]))",
+          "legendFormat": "RPS",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "JVM Heap 사용률",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "red", "value": 80 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "jvm_memory_used_bytes{job=\"moni-jvm\",application=\"$application\",area=\"heap\"} / jvm_memory_max_bytes{job=\"moni-jvm\",application=\"$application\",area=\"heap\"} * 100",
+          "legendFormat": "Heap",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "DB 커넥션 풀",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "hikaricp_connections_pending{job=\"moni-signals\",application=\"$application\"}",
+          "legendFormat": "대기 커넥션",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "에러율 추이",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": { "lineWidth": 2 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (status) (rate(http_server_requests_seconds_count{job=\"moni-signals\",application=\"$application\",status=~\"5..\"}[5m])) / sum(rate(http_server_requests_seconds_count{job=\"moni-signals\",application=\"$application\"}[5m])) * 100",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "레이턴시 분포 (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"moni-signals\",application=\"$application\"}[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"moni-signals\",application=\"$application\"}[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"moni-signals\",application=\"$application\"}[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "초당 요청 수 (RPS)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 7 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (status) (rate(http_server_requests_seconds_count{job=\"moni-signals\",application=\"$application\"}[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "JVM Heap 추이",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 7 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "jvm_memory_used_bytes{job=\"moni-jvm\",application=\"$application\",area=\"heap\"}",
+          "legendFormat": "Used"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "jvm_memory_max_bytes{job=\"moni-jvm\",application=\"$application\",area=\"heap\"}",
+          "legendFormat": "Max"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "JVM GC 시간",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 19, "w": 8, "h": 7 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (cause) (rate(jvm_gc_pause_seconds_sum{job=\"moni-jvm\",application=\"$application\"}[5m]))",
+          "legendFormat": "{{cause}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "JVM Thread 수",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 19, "w": 8, "h": 7 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "jvm_threads_live_threads{job=\"moni-jvm\",application=\"$application\"}",
+          "legendFormat": "Live"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "jvm_threads_daemon_threads{job=\"moni-jvm\",application=\"$application\"}",
+          "legendFormat": "Daemon"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "jvm_threads_peak_threads{job=\"moni-jvm\",application=\"$application\"}",
+          "legendFormat": "Peak"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "DB 커넥션 풀 추이",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 19, "w": 8, "h": 7 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "hikaricp_connections_active{job=\"moni-signals\",application=\"$application\"}",
+          "legendFormat": "Active"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "hikaricp_connections_pending{job=\"moni-signals\",application=\"$application\"}",
+          "legendFormat": "Pending"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "hikaricp_connections_max{job=\"moni-signals\",application=\"$application\"}",
+          "legendFormat": "Max"
+        }
+      ]
+    }
+  ]
+}

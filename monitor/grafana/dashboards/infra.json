@@ -1,0 +1,350 @@
+{
+  "title": "Infrastructure",
+  "uid": "moni-infra",
+  "tags": ["infrastructure"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "EC2 서버",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(node_cpu_seconds_total{job=\"node-exporter\"}, instance_name)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".*"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "CPU 사용률",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "orientation": "horizontal"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 80 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "100 - (avg by (instance_name) (rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\",instance_name=~\"$instance\"}[5m])) * 100)",
+          "legendFormat": "{{instance_name}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "메모리 사용률",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "orientation": "horizontal"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 85 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "(node_memory_MemTotal_bytes{job=\"node-exporter\",instance_name=~\"$instance\"} - node_memory_MemAvailable_bytes{job=\"node-exporter\",instance_name=~\"$instance\"}) / node_memory_MemTotal_bytes{job=\"node-exporter\",instance_name=~\"$instance\"} * 100",
+          "legendFormat": "{{instance_name}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "디스크 여유 공간",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "orientation": "horizontal"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 20 },
+              { "color": "green", "value": 40 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "node_filesystem_avail_bytes{job=\"node-exporter\",instance_name=~\"$instance\",mountpoint=\"/\"} / node_filesystem_size_bytes{job=\"node-exporter\",instance_name=~\"$instance\",mountpoint=\"/\"} * 100",
+          "legendFormat": "{{instance_name}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Kafka Consumer Lag 합계",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1000 },
+              { "color": "red", "value": 10000 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(kafka_consumergroup_lag_sum{job=\"kafka\"})",
+          "legendFormat": "Total Lag",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "EC2 CPU 사용률 추이",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": { "lineWidth": 2 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "100 - (avg by (instance_name) (rate(node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\",instance_name=~\"$instance\"}[5m])) * 100)",
+          "legendFormat": "{{instance_name}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "EC2 메모리 사용률 추이",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": { "lineWidth": 2 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 85 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "(node_memory_MemTotal_bytes{job=\"node-exporter\",instance_name=~\"$instance\"} - node_memory_MemAvailable_bytes{job=\"node-exporter\",instance_name=~\"$instance\"}) / node_memory_MemTotal_bytes{job=\"node-exporter\",instance_name=~\"$instance\"} * 100",
+          "legendFormat": "{{instance_name}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Kafka Consumer Lag 토픽별 추이",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineWidth": 2 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1000 },
+              { "color": "red", "value": 10000 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "kafka_consumergroup_lag_sum{job=\"kafka\"}",
+          "legendFormat": "{{topic}} / {{consumergroup}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "PostgreSQL 커넥션",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineWidth": 2 }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (datname) (pg_stat_activity_count{job=\"postgresql\"})",
+          "legendFormat": "{{datname}} 활성"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "pg_settings_max_connections{job=\"postgresql\"}",
+          "legendFormat": "최대 커넥션"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "PostgreSQL 캐시 히트율",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 7 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": { "lineWidth": 2 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 90 },
+              { "color": "green", "value": 95 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "pg_stat_database_blks_hit{job=\"postgresql\"} / (pg_stat_database_blks_hit{job=\"postgresql\"} + pg_stat_database_blks_read{job=\"postgresql\"}) * 100",
+          "legendFormat": "{{datname}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "PostgreSQL 데드락 발생 수",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 7 },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineWidth": 2 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "increase(pg_stat_database_deadlocks{job=\"postgresql\"}[5m])",
+          "legendFormat": "{{datname}}"
+        }
+      ]
+    }
+  ]
+}

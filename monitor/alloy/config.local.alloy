@@ -1,0 +1,159 @@
+// ============================================================
+// Grafana Alloy 로컬 설정
+// Promtail(로그) + Prometheus scraper(메트릭) 통합 대체
+// ============================================================
+
+// ============================================================
+// 1. 로그 수집 — loki.source.file (Promtail 대체)
+// ============================================================
+
+loki.source.file "moni_services" {
+  targets = [
+    {__path__ = "/var/log/services/**/*.log", job = "moni"},
+  ]
+  forward_to = [loki.process.filter.receiver]
+}
+
+loki.process "filter" {
+  // 파일 경로(filename 레이블)에서 서비스 이름 추출
+  // /var/log/services/<service>/<service>.log → service=<service>
+  stage.regex {
+    source     = "filename"
+    expression = "/var/log/services/(?P<service>[^/]+)/"
+  }
+  stage.labels {
+    values = {service = "service"}
+  }
+
+  // JSON 로그에서 level 필드 추출
+  stage.json {
+    expressions = {level = "level"}
+  }
+  stage.labels {
+    values = {level = "level"}
+  }
+
+  // INFO / DEBUG / TRACE drop → ERROR / WARN 만 Loki 저장
+  stage.drop {
+    source     = "level"
+    expression = "(?i)^(info|debug|trace)$"
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = sys.env("LOKI_URL")
+  }
+}
+
+// ============================================================
+// 2. 메트릭 수집 — prometheus.scrape (Prometheus scraper 대체)
+// ============================================================
+
+// Eureka SD로 서비스 목록 동적 조회
+discovery.eureka "moni" {
+  server           = sys.env("EUREKA_URL")
+  refresh_interval = "30s"
+}
+
+// Eureka 메타 레이블 → application / instance 레이블로 정규화
+discovery.relabel "moni_meta" {
+  targets = discovery.eureka.moni.targets
+
+  rule {
+    source_labels = ["__meta_eureka_app_name"]
+    target_label  = "application"
+    action        = "lowercase"
+  }
+  rule {
+    source_labels = ["__meta_eureka_app_instance_id"]
+    target_label  = "instance"
+  }
+}
+
+// 전체 메트릭 수집: 대시보드 상세용 (10분)
+prometheus.scrape "moni_services" {
+  targets         = discovery.relabel.moni_meta.output
+  scrape_interval = "600s"
+  metrics_path    = "/actuator/prometheus"
+  job_name        = "moni-services"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+// 헬스 감시 전용 (30초) — up 지표만 보존
+prometheus.scrape "moni_health" {
+  targets         = discovery.relabel.moni_meta.output
+  scrape_interval = "30s"
+  metrics_path    = "/actuator/prometheus"
+  job_name        = "moni-health"
+  forward_to      = [prometheus.relabel.health_filter.receiver]
+}
+
+prometheus.relabel "health_filter" {
+  // up 지표만 통과, 나머지는 모두 drop
+  rule {
+    source_labels = ["__name__"]
+    regex         = "up"
+    action        = "keep"
+  }
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+// HTTP 에러율 + HikariCP 신호 (60초)
+prometheus.scrape "moni_signals" {
+  targets         = discovery.relabel.moni_meta.output
+  scrape_interval = "60s"
+  metrics_path    = "/actuator/prometheus"
+  job_name        = "moni-signals"
+  forward_to      = [prometheus.relabel.signals_filter.receiver]
+}
+
+prometheus.relabel "signals_filter" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "http_server_requests_seconds_(bucket|count|sum)|hikaricp_connections_(active|pending|max|min)"
+    action        = "keep"
+  }
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+// JVM + CPU (5분)
+prometheus.scrape "moni_jvm" {
+  targets         = discovery.relabel.moni_meta.output
+  scrape_interval = "300s"
+  metrics_path    = "/actuator/prometheus"
+  job_name        = "moni-jvm"
+  forward_to      = [prometheus.relabel.jvm_filter.receiver]
+}
+
+prometheus.relabel "jvm_filter" {
+  rule {
+    source_labels = ["__name__"]
+    regex         = "jvm_memory_(used|max|committed)_bytes|jvm_gc_pause_seconds_(bucket|count|sum)|jvm_threads_(live|daemon|peak)_threads|process_cpu_usage"
+    action        = "keep"
+  }
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+
+// 모니터링 스택 자체 감시 (30초)
+prometheus.scrape "monitor_stack" {
+  targets = [
+    {"__address__" = "prometheus:9090",   job = "monitor-stack"},
+    {"__address__" = "loki:3100",         job = "monitor-stack"},
+    {"__address__" = "tempo:3200",        job = "monitor-stack"},
+    {"__address__" = "grafana:3000",      job = "monitor-stack"},
+    {"__address__" = "alertmanager:9093", job = "monitor-stack"},
+    {"__address__" = "alloy:12345",       job = "monitor-stack"},
+  ]
+  scrape_interval = "30s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+// Prometheus remote_write 엔드포인트
+prometheus.remote_write "default" {
+  endpoint {
+    url = sys.env("PROMETHEUS_REMOTE_WRITE_URL")
+  }
+}
