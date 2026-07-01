@@ -1,1 +1,5 @@
 /.env
+.docker-volumes/
+/.env.local.example
+/docs/runbook.md
+/.env.prod.example

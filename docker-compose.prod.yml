@@ -1,0 +1,110 @@
+# 운영 환경용 docker-compose override
+# 사용: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# 필수 환경변수 (.env.prod):
+#   AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#   LOKI_S3_BUCKET, TEMPO_S3_BUCKET
+#   OKTA_GRAFANA_CLIENT_ID, OKTA_GRAFANA_CLIENT_SECRET, OKTA_GRAFANA_ISSUER_URI
+#   GRAFANA_ROOT_URL, SERVICE_PRIVATE_IP, DISCORD_WEBHOOK_URL, DISCORD_CRITICAL_WEBHOOK_URL
+
+networks:
+  default:
+    name: moni-network
+    external: true
+
+volumes:
+  loki_data:
+  tempo_data:
+  prometheus_data:
+  grafana_data:
+
+services:
+
+  # ── Loki: S3 백엔드 ──────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.3.2
+    volumes:
+      - ./monitor/loki/loki.prod.yaml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    environment:
+      AWS_REGION: ${AWS_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      LOKI_S3_BUCKET: ${LOKI_S3_BUCKET}
+    ports:
+      - "${LOKI_PORT:-3100}:3100"    # service-ec2 Alloy 사이드카가 외부에서 push하므로 0.0.0.0 바인딩
+
+  # ── Tempo: S3 백엔드 + 운영 WAL 경로 ─────────────────────────────────────────
+  tempo:
+    image: grafana/tempo:2.6.1
+    volumes:
+      - ./monitor/tempo/tempo.prod.yaml:/etc/tempo.yaml
+      - tempo_data:/var/tempo
+    environment:
+      AWS_REGION: ${AWS_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      TEMPO_S3_BUCKET: ${TEMPO_S3_BUCKET}
+
+  # ── Alloy: 운영 config (monitoring-ec2 — 메트릭 수집 전담) ──────────────────
+  # 로그 수집은 service-ec2의 docker-compose.alloy.yml 사이드카가 담당
+  alloy:
+    image: grafana/alloy:latest
+    volumes:
+      - ./monitor/alloy/config.prod.alloy:/etc/alloy/config.alloy:ro
+    environment:
+      PROMETHEUS_REMOTE_WRITE_URL: http://prometheus:9090/api/v1/write
+      EUREKA_URL: http://${SERVICE_PRIVATE_IP}:${EUREKA_PORT:-8761}/eureka
+
+  # ── Prometheus: 운영 보존 기간 30일 ──────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v3.12.0
+    volumes:
+      - ./monitor/prometheus/prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitor/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        exec /bin/prometheus \
+          --config.file=/etc/prometheus/prometheus.yml \
+          --storage.tsdb.path=/prometheus \
+          --storage.tsdb.retention.time=30d \
+          --web.enable-lifecycle \
+          --web.enable-remote-write-receiver
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT}:9090"    # 운영: 외부 노출 차단 유지
+
+  # ── Grafana: Okta SSO, 로그인 폼 비활성화 ────────────────────────────────────
+  grafana:
+    image: grafana/grafana:13.1.0
+    environment:
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+      GF_SECURITY_ADMIN_USER: ""
+      GF_SECURITY_ADMIN_PASSWORD: ""
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL}
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+      GF_AUTH_GENERIC_OAUTH_NAME: "Okta"
+      GF_AUTH_GENERIC_OAUTH_CLIENT_ID: ${OKTA_GRAFANA_CLIENT_ID}
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: ${OKTA_GRAFANA_CLIENT_SECRET}
+      GF_AUTH_GENERIC_OAUTH_SCOPES: "openid profile email"
+      GF_AUTH_GENERIC_OAUTH_AUTH_URL: ${OKTA_GRAFANA_ISSUER_URI}/v1/authorize
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: ${OKTA_GRAFANA_ISSUER_URI}/v1/token
+      GF_AUTH_GENERIC_OAUTH_API_URL: ${OKTA_GRAFANA_ISSUER_URI}/v1/userinfo
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: "contains(groups[*], 'moni-admin') && 'Admin' || 'Viewer'"
+      GF_AUTH_SIGNOUT_REDIRECT_URL: ${OKTA_GRAFANA_ISSUER_URI}/v1/logout?post_logout_redirect_uri=${GRAFANA_ROOT_URL}&client_id=${OKTA_GRAFANA_CLIENT_ID}
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+
+  # ── Discord Webhook: 운영 채널 URL ────────────────────────────────────────────
+  discord-webhook:
+    image: benjojo/alertmanager-discord:latest
+    environment:
+      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_URL}
+
+  discord-webhook-critical:
+    image: benjojo/alertmanager-discord:latest
+    environment:
+      DISCORD_WEBHOOK: ${DISCORD_CRITICAL_WEBHOOK_URL}

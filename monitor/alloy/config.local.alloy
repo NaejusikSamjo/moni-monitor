@@ -7,10 +7,16 @@
 // 1. 로그 수집 — loki.source.file (Promtail 대체)
 // ============================================================
 
-loki.source.file "moni_services" {
-  targets = [
-    {__path__ = "/var/log/services/**/*.log", job = "moni"},
+// local.file_match 로 재귀 글로브 처리 후 loki.source.file 로 전달
+local.file_match "moni_logs" {
+  path_targets = [
+    { __path__ = "/var/log/services/*/*.log", job = "moni" },
   ]
+  sync_period = "10s"
+}
+
+loki.source.file "moni_services" {
+  targets    = local.file_match.moni_logs.targets
   forward_to = [loki.process.filter.receiver]
 }
 
@@ -33,10 +39,10 @@ loki.process "filter" {
     values = {level = "level"}
   }
 
-  // INFO / DEBUG / TRACE drop → ERROR / WARN 만 Loki 저장
+  // DEBUG / TRACE drop → ERROR / WARN / INFO 수집 (trace_id 연동용)
   stage.drop {
     source     = "level"
-    expression = "(?i)^(info|debug|trace)$"
+    expression = "(?i)^(debug|trace)$"
   }
 
   forward_to = [loki.write.default.receiver]
@@ -73,10 +79,10 @@ discovery.relabel "moni_meta" {
   }
 }
 
-// 전체 메트릭 수집: 대시보드 상세용 (10분)
+// 전체 메트릭 수집: 대시보드 상세용 (60초)
 prometheus.scrape "moni_services" {
   targets         = discovery.relabel.moni_meta.output
-  scrape_interval = "600s"
+  scrape_interval = "60s"
   metrics_path    = "/actuator/prometheus"
   job_name        = "moni-services"
   forward_to      = [prometheus.remote_write.default.receiver]
@@ -146,6 +152,28 @@ prometheus.scrape "monitor_stack" {
     {"__address__" = "grafana:3000",      job = "monitor-stack"},
     {"__address__" = "alertmanager:9093", job = "monitor-stack"},
     {"__address__" = "alloy:12345",       job = "monitor-stack"},
+  ]
+  scrape_interval = "30s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+// ============================================================
+// 3. 인프라 Exporter 스크래핑
+// ============================================================
+
+// Node Exporter — EC2 CPU / 메모리 / 디스크
+prometheus.scrape "node_exporter" {
+  targets = [
+    {"__address__" = "node-exporter:9100", job = "node-exporter", instance_name = "local"},
+  ]
+  scrape_interval = "30s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+// PostgreSQL Exporter
+prometheus.scrape "postgres_exporter" {
+  targets = [
+    {"__address__" = "postgres-exporter:9187", job = "postgresql", instance_name = "user-db"},
   ]
   scrape_interval = "30s"
   forward_to      = [prometheus.remote_write.default.receiver]
