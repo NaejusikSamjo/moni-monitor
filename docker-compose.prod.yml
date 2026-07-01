@@ -31,6 +31,8 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       LOKI_S3_BUCKET: ${LOKI_S3_BUCKET}
+    ports:
+      - "${LOKI_PORT:-3100}:3100"    # service-ec2 Alloy 사이드카가 외부에서 push하므로 0.0.0.0 바인딩
 
   # ── Tempo: S3 백엔드 + 운영 WAL 경로 ─────────────────────────────────────────
   tempo:
@@ -44,14 +46,13 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       TEMPO_S3_BUCKET: ${TEMPO_S3_BUCKET}
 
-  # ── Alloy: 운영 config ────────────────────────────────────────────────────────
+  # ── Alloy: 운영 config (monitoring-ec2 — 메트릭 수집 전담) ──────────────────
+  # 로그 수집은 service-ec2의 docker-compose.alloy.yml 사이드카가 담당
   alloy:
     image: grafana/alloy:latest
     volumes:
       - ./monitor/alloy/config.prod.alloy:/etc/alloy/config.alloy:ro
-      - ${LOG_PATH:-/var/log/moni}:/var/log/services:ro
     environment:
-      LOKI_URL: http://loki:3100/loki/api/v1/push
       PROMETHEUS_REMOTE_WRITE_URL: http://prometheus:9090/api/v1/write
       EUREKA_URL: http://${SERVICE_PRIVATE_IP}:${EUREKA_PORT:-8761}/eureka
 

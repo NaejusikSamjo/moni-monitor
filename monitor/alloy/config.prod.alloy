@@ -1,74 +1,20 @@
 // ============================================================
 // Grafana Alloy 운영(monitoring-ec2) 설정
 // Eureka SD로 service-ec2의 모든 서비스를 동적으로 발견하여
-// Loki(로그) · Prometheus(메트릭)에 전송
+// Prometheus(메트릭) · 모니터링 스택 자체를 감시
 //
 // 환경변수 (docker-compose.prod.yml 에서 주입):
-//   LOKI_URL                    — Loki push 엔드포인트
 //   PROMETHEUS_REMOTE_WRITE_URL — Prometheus remote_write 엔드포인트
 //   EUREKA_URL                  — Eureka 서버 주소
 // ============================================================
 
 // ============================================================
-// 1. 로그 수집 — /var/log/services/<service>/*.log
-// ============================================================
-
-loki.source.file "moni_services" {
-  targets = [
-    {__path__ = "/var/log/services/**/*.log", job = "moni"},
-  ]
-  forward_to = [loki.process.filter.receiver]
-}
-
-loki.process "filter" {
-  stage.regex {
-    source     = "filename"
-    expression = "/var/log/services/(?P<service>[^/]+)/"
-  }
-  stage.labels {
-    values = {service = "service"}
-  }
-
-  stage.json {
-    expressions = {level = "level"}
-  }
-  stage.labels {
-    values = {level = "level"}
-  }
-
-  // 운영: INFO 이하 drop (ERROR / WARN 만 보존)
-  stage.drop {
-    source     = "level"
-    expression = "(?i)^(info|debug|trace)$"
-  }
-
-  stage.static_labels {
-    values = {environment = "prod"}
-  }
-
-  forward_to = [loki.write.default.receiver]
-}
-
-loki.write "default" {
-  endpoint {
-    url = sys.env("LOKI_URL")
-
-    batch_size = 1048576   // 1 MiB
-    batch_wait = "10s"
-  }
-
-  external_labels = {
-    environment = "prod",
-  }
-}
-
-// ============================================================
-// 2. 메트릭 수집 — Eureka SD로 service-ec2의 모든 서비스 스크래핑
+// 1. 메트릭 수집 — Eureka SD로 service-ec2의 모든 서비스 스크래핑
 // ============================================================
 
 discovery.eureka "moni" {
   server           = sys.env("EUREKA_URL")
-  refresh_interval = "30s"
+  refresh_interval = "30s"   // 서비스 재배포 시 최대 30초 내 자동 반영
 }
 
 // Eureka 메타 레이블 → application / instance 레이블로 정규화
@@ -114,7 +60,7 @@ prometheus.relabel "health_filter" {
 }
 
 // ============================================================
-// 3. 모니터링 스택 자체 감시 (30초)
+// 2. 모니터링 스택 자체 감시 (30초)
 // ============================================================
 
 prometheus.scrape "monitor_stack" {
