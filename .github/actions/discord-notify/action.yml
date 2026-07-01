@@ -1,0 +1,97 @@
+name: Discord Notify
+description: Send Discord embed notification
+
+inputs:
+  webhook:
+    description: Discord webhook URL
+    required: true
+
+  title:
+    description: Embed title
+    required: true
+
+  color:
+    description: Embed color (decimal)
+    required: true
+
+  message:
+    description: Commit or PR message
+    required: false
+    default: ""
+
+  branch:
+    description: Branch name
+    required: false
+    default: ""
+
+  sha:
+    description: Commit SHA
+    required: false
+    default: ""
+
+runs:
+  using: composite
+
+  steps:
+    - name: Send Discord message
+      shell: bash
+      env:
+        WEBHOOK: ${{ inputs.webhook }}
+        TITLE: ${{ inputs.title }}
+        COLOR: ${{ inputs.color }}
+        MESSAGE: ${{ inputs.message }}
+        BRANCH: ${{ inputs.branch }}
+        SHA: ${{ inputs.sha }}
+
+      run: |
+        set +e
+
+        SHORT_SHA=$(echo "$SHA" | cut -c1-7)
+
+        PAYLOAD=$(jq -n \
+          --arg title "$TITLE" \
+          --arg message "$MESSAGE" \
+          --arg branch "$BRANCH" \
+          --arg sha "$SHORT_SHA" \
+          --arg color "$COLOR" \
+          '{
+            embeds: [{
+              title: $title,
+              color: ($color | tonumber),
+              fields: [
+                {
+                  name: "브랜치",
+                  value: ("`" + $branch + "`"),
+                  inline: true
+                },
+                {
+                  name: "커밋",
+                  value: ("`" + $sha + "`"),
+                  inline: true
+                },
+                {
+                  name: "메시지",
+                  value: $message,
+                  inline: false
+                }
+              ],
+              footer: {
+                text: "GitHub Actions"
+              }
+            }]
+          }')
+
+        HTTP_CODE=$(curl -s \
+          -o /tmp/discord_response.txt \
+          -w "%{http_code}" \
+          -H "Content-Type: application/json" \
+          -d "$PAYLOAD" \
+          "$WEBHOOK")
+
+        if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+          echo "[Discord Notify] failed with HTTP $HTTP_CODE"
+          cat /tmp/discord_response.txt
+          exit 0
+        fi
+
+        exit 0

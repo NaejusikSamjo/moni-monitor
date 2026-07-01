@@ -1,0 +1,128 @@
+name: CD-Monitoring
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      COMMIT_MSG: ${{ github.event.head_commit.message || 'manual deploy' }}
+      BRANCH: ${{ github.ref_name }}
+      COMMIT_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Notify start
+        uses: ./.github/actions/discord-notify
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          title: "모니터링 CD 시작"
+          color: 3447003
+          message: ${{ env.COMMIT_MSG }}
+          branch: ${{ env.BRANCH }}
+          sha: ${{ env.COMMIT_SHA }}
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.BASTION_HOST_KEY }}" >> ~/.ssh/known_hosts
+          echo "${{ secrets.MONITORING_HOST_KEY }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          printf '%s\n' \
+            'Host bastion' \
+            '  HostName ${{ secrets.BASTION_HOST }}' \
+            '  User ubuntu' \
+            '  IdentityFile ~/.ssh/id_rsa' \
+            'Host monitoring' \
+            '  HostName ${{ secrets.MONITORING_HOST }}' \
+            '  User ubuntu' \
+            '  IdentityFile ~/.ssh/id_rsa' \
+            '  ProxyJump bastion' \
+            >> ~/.ssh/config
+
+      - name: Save pre-deploy state
+        run: |
+          PREV=$(ssh monitoring "cat ~/monitoring/.deployed-sha 2>/dev/null || true")
+          echo "PREV_SHA=${PREV}" >> $GITHUB_ENV
+
+      - name: Transfer files
+        run: |
+          ssh monitoring "mkdir -p ~/monitoring"
+          # monitor/ 디렉터리가 존재하면 백업
+          ssh monitoring "[ -d ~/monitoring/monitor ] && cp -r ~/monitoring/monitor ~/monitoring/monitor.bak || true"
+          scp docker-compose.yml monitoring:~/monitoring/docker-compose.yml
+          scp docker-compose.prod.yml monitoring:~/monitoring/docker-compose.prod.yml
+          scp -r monitor/ monitoring:~/monitoring/
+
+      - name: Deploy
+        run: |
+          ssh monitoring "
+            docker network create moni-network 2>/dev/null || true
+            cd ~/monitoring
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod pull
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d
+            echo '${{ github.sha }}' > ~/monitoring/.deployed-sha
+          "
+
+      - name: Health check
+        id: health-check
+        run: |
+          OK=false
+          for i in $(seq 1 12); do
+            if ssh monitoring "curl -sf http://localhost:3000/api/health > /dev/null 2>&1"; then
+              echo "✓ Grafana healthy (${i}번째 시도)"
+              OK=true
+              break
+            fi
+            echo "  대기 중... (${i}/12)"
+            sleep 15
+          done
+          $OK || exit 1
+
+      - name: Rollback
+        if: failure() && steps.health-check.conclusion == 'failure'
+        run: |
+          echo "Rolling back to ${PREV_SHA}..."
+          ssh monitoring "
+            cd ~/monitoring
+            if [ -d monitor.bak ]; then
+              rm -rf monitor
+              mv monitor.bak monitor
+            fi
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d
+            [ -n '${PREV_SHA}' ] && echo '${PREV_SHA}' > ~/monitoring/.deployed-sha || true
+          "
+
+      - name: Cleanup backup
+        if: success()
+        run: ssh monitoring "rm -rf ~/monitoring/monitor.bak 2>/dev/null || true"
+
+      - name: Notify success
+        if: success()
+        uses: ./.github/actions/discord-notify
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          title: "모니터링 CD 성공"
+          color: 5763719
+          message: ${{ env.COMMIT_MSG }}
+          branch: ${{ env.BRANCH }}
+          sha: ${{ env.COMMIT_SHA }}
+
+      - name: Notify failure
+        if: failure()
+        uses: ./.github/actions/discord-notify
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          title: "모니터링 CD 실패"
+          color: 15548997
+          message: ${{ env.COMMIT_MSG }}
+          branch: ${{ env.BRANCH }}
+          sha: ${{ env.COMMIT_SHA }}
