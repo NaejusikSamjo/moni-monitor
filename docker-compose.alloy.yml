@@ -1,0 +1,58 @@
+# ============================================================
+# docker-compose.alloy.yml — 언제 기동하는가?
+# ============================================================
+#
+# ┌──────────────────────────────────────────────────────────┐
+# │ 이 파일은 "service-ec2" (서비스 서버) 에서만 단독 실행합니다.   │
+# │ monitor-ec2 (모니터링 서버) 에서는 사용하지 않습니다.           │
+# └──────────────────────────────────────────────────────────┘
+#
+# ▶ 기동 시점 (service-ec2)
+#   1. docker-compose.infra.yml 기동 완료 (DB, Redis, Kafka)
+#   2. docker-compose.yml 기동 완료 (Spring Boot 서비스들)
+#   3. 이 파일을 기동: Alloy가 로그 수집 + Eureka SD 메트릭 수집 시작
+#
+# ▶ monitor-ec2 에서는 docker-compose.yml 에 alloy 가 이미 포함됨.
+#   → service-ec2 에서 이 파일로 추가 alloy sidecar 를 띄울 때 사용.
+#
+# ▶ 로컬 개발 환경에서는 monitoring/docker-compose.yml 의 alloy 로 충분.
+#   → 이 파일은 로컬에서 실행하지 않습니다.
+#
+# ▶ 환경변수 설정 후 실행:
+#   cp .env.alloy.example .env.alloy
+#   # 값 채운 후:
+#   docker compose -f docker-compose.alloy.yml --env-file .env.alloy up -d
+#
+# ▶ 필수 환경변수:
+#   HOST_NAME              = service-ec2 식별자 (예: moni-service-ec2)
+#   LOKI_URL               = http://<monitor-ec2-private-ip>:3100/loki/api/v1/push
+#   PROMETHEUS_REMOTE_WRITE_URL = http://<monitor-ec2-private-ip>:9090/api/v1/write
+#   EUREKA_URL             = http://<service-ec2-private-ip>:8761/eureka
+
+networks:
+  default:
+    name: moni-network
+    external: true
+
+services:
+  alloy:
+    image: grafana/alloy:latest
+    container_name: moni-alloy-sidecar
+    restart: unless-stopped
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./monitor/alloy/config.prod.alloy:/etc/alloy/config.alloy:ro
+      - /var/log/services:/var/log/services:ro
+    ports:
+      - "127.0.0.1:12345:12345"
+    environment:
+      LOKI_URL: ${LOKI_URL}
+      PROMETHEUS_REMOTE_WRITE_URL: ${PROMETHEUS_REMOTE_WRITE_URL}
+      EUREKA_URL: ${EUREKA_URL}
+      HOST_NAME: ${HOST_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:12345/-/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

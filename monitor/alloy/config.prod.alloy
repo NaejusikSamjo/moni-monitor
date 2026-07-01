@@ -151,10 +151,10 @@ prometheus.relabel "jvm_filter" {
   forward_to = [prometheus.remote_write.default.receiver]
 }
 
-// 전체 메트릭 (10분 — 대시보드 상세용)
+// 전체 메트릭 (60초 — 대시보드 상세용)
 prometheus.scrape "moni_services" {
   targets         = discovery.relabel.moni_local.output
-  scrape_interval = "600s"
+  scrape_interval = "60s"
   metrics_path    = "/actuator/prometheus"
   job_name        = "moni-services"
   forward_to      = [prometheus.remote_write.default.receiver]

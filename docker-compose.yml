@@ -1,0 +1,195 @@
+networks:
+  default:
+    name: moni-network
+    external: true
+
+volumes:
+  loki_data:
+  tempo_data:
+  prometheus_data:
+  grafana_data:
+
+services:
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: moni-tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./monitor/tempo/tempo.yml:/etc/tempo.yaml
+      - tempo_data:/var/tempo
+    ports:
+      - "${TEMPO_GRPC_PORT}:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:3200:3200"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3200/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: moni-loki
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${LOKI_PORT}:3100"
+    volumes:
+      - ./monitor/loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: moni-alloy
+    restart: unless-stopped
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./monitor/alloy/config.local.alloy:/etc/alloy/config.alloy:ro
+      - ${LOG_PATH:-../moni/logs}:/var/log/services:ro
+    ports:
+      - "127.0.0.1:12345:12345"
+    environment:
+      LOKI_URL: http://loki:3100/loki/api/v1/push
+      PROMETHEUS_REMOTE_WRITE_URL: http://prometheus:9090/api/v1/write
+      EUREKA_URL: http://${SERVICE_PRIVATE_IP}:${EUREKA_PORT:-8761}/eureka
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      loki:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.12.0
+    container_name: moni-prometheus
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        exec /bin/prometheus \
+          --config.file=/etc/prometheus/prometheus.yml \
+          --storage.tsdb.path=/prometheus \
+          --storage.tsdb.retention.time=15d \
+          --web.enable-lifecycle \
+          --web.enable-remote-write-receiver
+    volumes:
+      - ./monitor/prometheus/prometheus-alloy.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitor/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT}:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: moni-alertmanager
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./monitor/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:9093:9093"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9093/-/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+  discord-webhook:
+    image: benjojo/alertmanager-discord:latest
+    container_name: moni-discord-webhook
+    restart: unless-stopped
+    environment:
+      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_URL}
+    ports:
+      - "127.0.0.1:9094:9094"
+
+  discord-webhook-critical:
+    image: benjojo/alertmanager-discord:latest
+    container_name: moni-discord-webhook-critical
+    restart: unless-stopped
+    environment:
+      DISCORD_WEBHOOK: ${DISCORD_CRITICAL_WEBHOOK_URL:-${DISCORD_WEBHOOK_URL}}
+    ports:
+      - "127.0.0.1:9095:9094"
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: moni-node-exporter
+    restart: unless-stopped
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    ports:
+      - "127.0.0.1:${NODE_EXPORTER_PORT:-9100}:9100"
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: moni-postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${PG_EXPORTER_USER:-moni_admin}:${PG_EXPORTER_PASSWORD}@user-db:5432/user_db?sslmode=disable"
+    ports:
+      - "127.0.0.1:${PG_EXPORTER_PORT:-9187}:9187"
+
+  grafana:
+    image: grafana/grafana:13.1.0
+    container_name: moni-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    environment:
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+    volumes:
+      - ./monitor/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitor/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s

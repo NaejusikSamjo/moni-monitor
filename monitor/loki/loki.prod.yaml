@@ -14,7 +14,7 @@ common:
 # S3 백엔드 — 청크·인덱스·룰 모두 S3에 저장
 storage_config:
   aws:
-    s3: s3://${AWS_REGION}/${LOKI_S3_BUCKET}
+    s3: s3://${LOKI_S3_BUCKET}
     region: ${AWS_REGION}
     # EC2 Instance Profile 사용 시 access_key/secret_key 생략 가능
     access_key_id: ${AWS_ACCESS_KEY_ID}

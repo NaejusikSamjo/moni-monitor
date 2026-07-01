@@ -45,7 +45,7 @@
         "defaults": {
           "color": { "mode": "palette-classic" },
           "custom": { "lineWidth": 2, "fillOpacity": 10 },
-          "unit": "ms"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -55,19 +55,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.50, sum(rate(traces_spanmetrics_duration_milliseconds_bucket{service=~\"$service\"}[$__rate_interval])) by (le, service))",
+          "expr": "histogram_quantile(0.50, sum(rate(traces_spanmetrics_latency_bucket{service=~\"$service\"}[$__rate_interval])) by (le, service))",
           "legendFormat": "p50 {{service}}",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(traces_spanmetrics_duration_milliseconds_bucket{service=~\"$service\"}[$__rate_interval])) by (le, service))",
+          "expr": "histogram_quantile(0.95, sum(rate(traces_spanmetrics_latency_bucket{service=~\"$service\"}[$__rate_interval])) by (le, service))",
           "legendFormat": "p95 {{service}}",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.99, sum(rate(traces_spanmetrics_duration_milliseconds_bucket{service=~\"$service\"}[$__rate_interval])) by (le, service))",
+          "expr": "histogram_quantile(0.99, sum(rate(traces_spanmetrics_latency_bucket{service=~\"$service\"}[$__rate_interval])) by (le, service))",
           "legendFormat": "p99 {{service}}",
           "refId": "C"
         }
