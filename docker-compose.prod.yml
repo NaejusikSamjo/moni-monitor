@@ -22,6 +22,7 @@ services:
 
   # ── Loki: S3 백엔드 ──────────────────────────────────────────────────────────
   loki:
+    image: grafana/loki:3.3.2
     volumes:
       - ./monitor/loki/loki.prod.yaml:/etc/loki/local-config.yaml
       - loki_data:/loki
@@ -33,6 +34,7 @@ services:
 
   # ── Tempo: S3 백엔드 + 운영 WAL 경로 ─────────────────────────────────────────
   tempo:
+    image: grafana/tempo:2.6.1
     volumes:
       - ./monitor/tempo/tempo.prod.yaml:/etc/tempo.yaml
       - tempo_data:/var/tempo
@@ -44,6 +46,7 @@ services:
 
   # ── Alloy: 운영 config ────────────────────────────────────────────────────────
   alloy:
+    image: grafana/alloy:latest
     volumes:
       - ./monitor/alloy/config.prod.alloy:/etc/alloy/config.alloy:ro
       - ${LOG_PATH:-/var/log/moni}:/var/log/services:ro
@@ -54,6 +57,7 @@ services:
 
   # ── Prometheus: 운영 보존 기간 30일 ──────────────────────────────────────────
   prometheus:
+    image: prom/prometheus:v3.12.0
     volumes:
       - ./monitor/prometheus/prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitor/prometheus/rules:/etc/prometheus/rules:ro
@@ -73,6 +77,7 @@ services:
 
   # ── Grafana: Okta SSO, 로그인 폼 비활성화 ────────────────────────────────────
   grafana:
+    image: grafana/grafana:13.1.0
     environment:
       GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
       GF_SECURITY_ADMIN_USER: ""
@@ -94,9 +99,11 @@ services:
 
   # ── Discord Webhook: 운영 채널 URL ────────────────────────────────────────────
   discord-webhook:
+    image: benjojo/alertmanager-discord:latest
     environment:
       DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_URL}
 
   discord-webhook-critical:
+    image: benjojo/alertmanager-discord:latest
     environment:
       DISCORD_WEBHOOK: ${DISCORD_CRITICAL_WEBHOOK_URL}

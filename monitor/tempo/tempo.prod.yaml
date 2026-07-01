@@ -10,16 +10,6 @@ distributor:
         http:
           endpoint: 0.0.0.0:4318
 
-# Tail-based sampling: 에러·고지연 우선, 정상 요청 10% 샘플링
-distributor:
-  receivers:
-    otlp:
-      protocols:
-        grpc:
-          endpoint: 0.0.0.0:4317
-        http:
-          endpoint: 0.0.0.0:4318
-
 ingester:
   trace_idle_period: 10s
   max_block_bytes: 1_000_000
@@ -60,8 +50,6 @@ overrides:
   defaults:
     metrics_generator:
       processors: [service-graphs, span-metrics]
-    # tail_sampling은 tempo.prod 에서는 별도 pipeline으로 구성 가능
-    # 현재는 OTel Collector 레벨에서 tail-sampling-processor 사용 권장
 
 # Tail Sampling 정책 (OTel Collector 없이 Tempo 자체 적용 시)
 # 참고: https://grafana.com/docs/tempo/latest/configuration/#tail-based-sampling
