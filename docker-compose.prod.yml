@@ -23,6 +23,7 @@ services:
   # ── Loki: S3 백엔드 ──────────────────────────────────────────────────────────
   loki:
     image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki/local-config.yaml", "-config.expand-env=true"]
     volumes:
       - ./monitor/loki/loki.prod.yaml:/etc/loki/local-config.yaml
       - loki_data:/loki
@@ -37,6 +38,7 @@ services:
   # ── Tempo: S3 백엔드 + 운영 WAL 경로 ─────────────────────────────────────────
   tempo:
     image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo.yaml", "-config.expand-env=true"]
     volumes:
       - ./monitor/tempo/tempo.prod.yaml:/etc/tempo.yaml
       - tempo_data:/var/tempo
