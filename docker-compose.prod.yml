@@ -33,8 +33,6 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       LOKI_S3_BUCKET: ${LOKI_S3_BUCKET}
       LOKI_S3_PREFIX: ${LOKI_S3_PREFIX}
-    ports:
-      - "${LOKI_PORT:-3100}:3100"    # service-ec2 Alloy 사이드카가 외부에서 push하므로 0.0.0.0 바인딩
 
   # ── Tempo: S3 백엔드 + 운영 WAL 경로 ─────────────────────────────────────────
   tempo:

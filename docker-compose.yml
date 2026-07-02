@@ -36,7 +36,7 @@ services:
     container_name: moni-loki
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${LOKI_PORT}:3100"
+      - "${LOKI_PORT}:3100"
     volumes:
       - ./monitor/loki/loki-config.yml:/etc/loki/local-config.yaml
       - loki_data:/loki
