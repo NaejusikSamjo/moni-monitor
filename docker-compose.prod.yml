@@ -57,6 +57,7 @@ services:
     environment:
       PROMETHEUS_REMOTE_WRITE_URL: http://prometheus:9090/api/v1/write
       EUREKA_URL: http://${SERVICE_PRIVATE_IP}:${EUREKA_PORT:-8761}/eureka
+      SERVICE_PRIVATE_IP: ${SERVICE_PRIVATE_IP}
 
   # ── Prometheus: 운영 보존 기간 30일 ──────────────────────────────────────────
   prometheus:

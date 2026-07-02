@@ -18,6 +18,7 @@ discovery.eureka "moni" {
 }
 
 // Eureka 메타 레이블 → application / instance 레이블로 정규화
+// 서비스가 Docker 내부 IP(172.18.x.x)로 Eureka에 등록되므로 service-EC2 호스트 IP로 교체
 discovery.relabel "moni_meta" {
   targets = discovery.eureka.moni.targets
 
@@ -29,6 +30,17 @@ discovery.relabel "moni_meta" {
   rule {
     source_labels = ["__meta_eureka_app_instance_id"]
     target_label  = "instance"
+  }
+  rule {
+    target_label = "__host_ip"
+    replacement  = sys.env("SERVICE_PRIVATE_IP")
+  }
+  rule {
+    source_labels = ["__host_ip", "__address__"]
+    separator     = ";"
+    regex         = "([^;]+);[^:]+:([0-9]+)"
+    replacement   = "$1:$2"
+    target_label  = "__address__"
   }
 }
 
