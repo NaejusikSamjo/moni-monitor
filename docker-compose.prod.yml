@@ -104,6 +104,10 @@ services:
       - "${GRAFANA_PORT:-3000}:3000"
 
   # ── Discord Webhook: 운영 채널 URL ────────────────────────────────────────────
+  postgres-exporter:
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${PG_EXPORTER_USER}:${PG_EXPORTER_PASSWORD}@${INFRA_PRIVATE_IP}:5432/user_db?sslmode=disable"
+
   discord-webhook:
     image: benjojo/alertmanager-discord:latest
     environment:
