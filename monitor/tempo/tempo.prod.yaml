@@ -33,6 +33,7 @@ storage:
     backend: s3
     s3:
       bucket: ${TEMPO_S3_BUCKET}
+      prefix: ${TEMPO_S3_PREFIX}
       endpoint: s3.${AWS_REGION}.amazonaws.com
       region: ${AWS_REGION}
       access_key: ${AWS_ACCESS_KEY_ID}

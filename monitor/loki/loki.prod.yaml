@@ -11,18 +11,15 @@ common:
     kvstore:
       store: inmemory
 
-# S3 백엔드 — 청크·인덱스·룰 모두 S3에 저장
 storage_config:
   aws:
-    s3: s3://${LOKI_S3_BUCKET}
+    bucketnames: ${LOKI_S3_BUCKET}
     region: ${AWS_REGION}
-    # EC2 Instance Profile 사용 시 access_key/secret_key 생략 가능
     access_key_id: ${AWS_ACCESS_KEY_ID}
     secret_access_key: ${AWS_SECRET_ACCESS_KEY}
   tsdb_shipper:
     active_index_directory: /loki/index
     cache_location: /loki/index_cache
-    shared_store: s3
 
 schema_config:
   configs:
@@ -37,11 +34,10 @@ schema_config:
 limits_config:
   reject_old_samples: true
   reject_old_samples_max_age: 168h
-  retention_period: 720h    # 운영: 30일 보존
+  retention_period: 720h
 
 compactor:
   working_directory: /loki/compactor
-  shared_store: s3
   retention_enabled: true
   delete_request_store: s3
   compaction_interval: 10m
