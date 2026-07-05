@@ -144,6 +144,23 @@ groups:
         annotations:
           summary: "{{ $labels.instance_name }} 메모리 {{ $value | humanize }}%"
 
+      - alert: DiskSpaceWarning
+        expr: |
+          node_filesystem_avail_bytes{
+            job="node-exporter",
+            mountpoint="/"
+          }
+          / node_filesystem_size_bytes{
+            job="node-exporter",
+            mountpoint="/"
+          }
+          * 100 < 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance_name }} 디스크 여유 {{ $value | humanize }}% — 로그/Docker 정리 필요"
+
       - alert: DiskSpaceLow
         expr: |
           node_filesystem_avail_bytes{
@@ -159,7 +176,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "{{ $labels.instance_name }} 디스크 여유 {{ $value | humanize }}%"
+          summary: "{{ $labels.instance_name }} 디스크 여유 {{ $value | humanize }}% — 즉시 조치 필요"
 
   - name: kafka
     rules:

@@ -208,13 +208,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(jvm_memory_used_bytes{job=\"moni-jvm\", application=~\"$application\", area=\"heap\"}) by (application)",
+          "expr": "sum(jvm_memory_used_bytes{job=\"moni-services\", application=~\"$application\", area=\"heap\"}) by (application)",
           "legendFormat": "{{application}} used",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(jvm_memory_max_bytes{job=\"moni-jvm\", application=~\"$application\", area=\"heap\"}) by (application)",
+          "expr": "sum(jvm_memory_max_bytes{job=\"moni-services\", application=~\"$application\", area=\"heap\"}) by (application)",
           "legendFormat": "{{application}} max",
           "refId": "B"
         }
@@ -242,7 +242,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "process_cpu_usage{job=\"moni-jvm\", application=~\"$application\"}",
+          "expr": "process_cpu_usage{job=\"moni-services\", application=~\"$application\"}",
           "legendFormat": "{{application}}",
           "refId": "A"
         }
@@ -268,7 +268,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "jvm_threads_live_threads{job=\"moni-jvm\", application=~\"$application\"}",
+          "expr": "jvm_threads_live_threads{job=\"moni-services\", application=~\"$application\"}",
           "legendFormat": "{{application}} live",
           "refId": "A"
         }
