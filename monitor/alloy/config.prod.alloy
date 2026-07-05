@@ -1,78 +1,16 @@
 // ============================================================
 // Grafana Alloy 운영(monitoring-ec2) 설정
-// Eureka SD로 service-ec2의 모든 서비스를 동적으로 발견하여
-// Prometheus(메트릭) · 모니터링 스택 자체를 감시
+// 인프라 메트릭 + 모니터링 스택 자체 감시 담당
+// 서비스 메트릭은 service-ec2 사이드카 Alloy가 scrape 후 remote_write
 //
 // 환경변수 (docker-compose.prod.yml 에서 주입):
 //   PROMETHEUS_REMOTE_WRITE_URL — Prometheus remote_write 엔드포인트
-//   EUREKA_URL                  — Eureka 서버 주소
+//   SERVICE_PRIVATE_IP          — service-ec2 private IP
+//   INFRA_PRIVATE_IP            — infra-ec2 private IP
 // ============================================================
 
 // ============================================================
-// 1. 메트릭 수집 — Eureka SD로 service-ec2의 모든 서비스 스크래핑
-// ============================================================
-
-discovery.eureka "moni" {
-  server           = sys.env("EUREKA_URL")
-  refresh_interval = "30s"   // 서비스 재배포 시 최대 30초 내 자동 반영
-}
-
-// Eureka 메타 레이블 → application / instance 레이블로 정규화
-// 서비스가 Docker 내부 IP(172.18.x.x)로 Eureka에 등록되므로 service-EC2 호스트 IP로 교체
-discovery.relabel "moni_meta" {
-  targets = discovery.eureka.moni.targets
-
-  rule {
-    source_labels = ["__meta_eureka_app_name"]
-    target_label  = "application"
-    action        = "lowercase"
-  }
-  rule {
-    source_labels = ["__meta_eureka_app_instance_id"]
-    target_label  = "instance"
-  }
-  rule {
-    target_label = "__host_ip"
-    replacement  = sys.env("SERVICE_PRIVATE_IP")
-  }
-  rule {
-    source_labels = ["__host_ip", "__address__"]
-    separator     = ";"
-    regex         = "([^;]+);[^:]+:([0-9]+)"
-    replacement   = "$1:$2"
-    target_label  = "__address__"
-  }
-}
-
-// 전체 메트릭 (60초) — 대시보드 상세용
-prometheus.scrape "moni_services" {
-  targets         = discovery.relabel.moni_meta.output
-  scrape_interval = "60s"
-  metrics_path    = "/actuator/prometheus"
-  job_name        = "moni-services"
-  forward_to      = [prometheus.remote_write.default.receiver]
-}
-
-// 헬스 감시 (30초) — up 지표만
-prometheus.scrape "moni_health" {
-  targets         = discovery.relabel.moni_meta.output
-  scrape_interval = "30s"
-  metrics_path    = "/actuator/prometheus"
-  job_name        = "moni-health"
-  forward_to      = [prometheus.relabel.health_filter.receiver]
-}
-
-prometheus.relabel "health_filter" {
-  rule {
-    source_labels = ["__name__"]
-    regex         = "up"
-    action        = "keep"
-  }
-  forward_to = [prometheus.remote_write.default.receiver]
-}
-
-// ============================================================
-// 2. 인프라 메트릭 수집 (30초)
+// 1. 인프라 메트릭 수집 (30초)
 // ============================================================
 
 prometheus.scrape "infra_exporters" {
@@ -87,7 +25,7 @@ prometheus.scrape "infra_exporters" {
 }
 
 // ============================================================
-// 3. 모니터링 스택 자체 감시 (30초)
+// 2. 모니터링 스택 자체 감시 (30초)
 // ============================================================
 
 prometheus.scrape "monitor_stack" {

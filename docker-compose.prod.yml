@@ -56,7 +56,6 @@ services:
       - ./monitor/alloy/config.prod.alloy:/etc/alloy/config.alloy:ro
     environment:
       PROMETHEUS_REMOTE_WRITE_URL: http://prometheus:9090/api/v1/write
-      EUREKA_URL: http://${SERVICE_PRIVATE_IP}:${EUREKA_PORT:-8761}/eureka
       SERVICE_PRIVATE_IP: ${SERVICE_PRIVATE_IP}
       INFRA_PRIVATE_IP: ${INFRA_PRIVATE_IP}
 
@@ -78,7 +77,7 @@ services:
           --web.enable-lifecycle \
           --web.enable-remote-write-receiver
     ports:
-      - "127.0.0.1:${PROMETHEUS_PORT}:9090"    # 운영: 외부 노출 차단 유지
+      - "${PROMETHEUS_PORT}:9090"    # service-ec2 사이드카 remote_write 허용
 
   # ── Grafana: Okta SSO, 로그인 폼 비활성화 ────────────────────────────────────
   grafana:
