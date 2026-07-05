@@ -76,9 +76,6 @@ services:
           --storage.tsdb.retention.time=30d \
           --web.enable-lifecycle \
           --web.enable-remote-write-receiver
-    ports:
-      - "${PROMETHEUS_PORT}:9090"    # service-ec2 사이드카 remote_write 허용
-
   # ── Grafana: Okta SSO, 로그인 폼 비활성화 ────────────────────────────────────
   grafana:
     image: grafana/grafana:13.1.0

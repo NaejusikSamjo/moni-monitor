@@ -88,7 +88,7 @@ services:
       - ./monitor/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     ports:
-      - "127.0.0.1:${PROMETHEUS_PORT}:9090"
+      - "${PROMETHEUS_PORT}:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
