@@ -19,6 +19,18 @@
         "multi": false,
         "includeAll": true,
         "allValue": ".*"
+      },
+      {
+        "name": "db",
+        "label": "PostgreSQL DB",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(pg_stat_activity_count{job=\"postgresql\"}, db)",
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*"
       }
     ]
   },
@@ -273,13 +285,13 @@
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "sum by (datname) (pg_stat_activity_count{job=\"postgresql\"})",
-          "legendFormat": "{{datname}} 활성"
+          "expr": "sum by (db) (pg_stat_activity_count{job=\"postgresql\",db=~\"$db\"})",
+          "legendFormat": "{{db}} 활성"
         },
         {
           "datasource": "Prometheus",
-          "expr": "pg_settings_max_connections{job=\"postgresql\"}",
-          "legendFormat": "최대 커넥션"
+          "expr": "pg_settings_max_connections{job=\"postgresql\",db=~\"$db\"}",
+          "legendFormat": "{{db}} 최대"
         }
       ]
     },
@@ -311,8 +323,8 @@
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "pg_stat_database_blks_hit{job=\"postgresql\"} / (pg_stat_database_blks_hit{job=\"postgresql\"} + pg_stat_database_blks_read{job=\"postgresql\"}) * 100",
-          "legendFormat": "{{datname}}"
+          "expr": "pg_stat_database_blks_hit{job=\"postgresql\",db=~\"$db\"} / (pg_stat_database_blks_hit{job=\"postgresql\",db=~\"$db\"} + pg_stat_database_blks_read{job=\"postgresql\",db=~\"$db\"}) * 100",
+          "legendFormat": "{{db}}"
         }
       ]
     },
@@ -341,8 +353,8 @@
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "increase(pg_stat_database_deadlocks{job=\"postgresql\"}[5m])",
-          "legendFormat": "{{datname}}"
+          "expr": "increase(pg_stat_database_deadlocks{job=\"postgresql\",db=~\"$db\"}[5m])",
+          "legendFormat": "{{db}}"
         }
       ]
     }

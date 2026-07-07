@@ -15,10 +15,22 @@
 
 prometheus.scrape "infra_exporters" {
   targets = [
-    {"__address__" = "node-exporter:9100",                          job = "node-exporter", instance_name = "monitor-ec2"},
-    {"__address__" = sys.env("SERVICE_PRIVATE_IP") + ":9100",      job = "node-exporter", instance_name = "service-ec2"},
-    {"__address__" = sys.env("INFRA_PRIVATE_IP") + ":9100",        job = "node-exporter", instance_name = "infra-ec2"},
-    {"__address__" = "postgres-exporter:9187",                      job = "postgresql"},
+    // node-exporter
+    {"__address__" = "node-exporter:9100",                        job = "node-exporter", instance_name = "monitor-ec2"},
+    {"__address__" = sys.env("SERVICE_PRIVATE_IP") + ":9100",    job = "node-exporter", instance_name = "service-ec2"},
+    {"__address__" = sys.env("INFRA_PRIVATE_IP") + ":9100",      job = "node-exporter", instance_name = "infra-ec2"},
+
+    // postgres-exporter (DB별 독립 인스턴스, 컨테이너 내부 포트 9187 고정)
+    {"__address__" = "postgres-exporter:9187",              job = "postgresql", db = "user_db"},
+    {"__address__" = "postgres-exporter-portfolio:9187",    job = "postgresql", db = "portfolio_db"},
+    {"__address__" = "postgres-exporter-stock:9187",        job = "postgresql", db = "stock_db"},
+    {"__address__" = "postgres-exporter-notification:9187", job = "postgresql", db = "notification_db"},
+    {"__address__" = "postgres-exporter-trade:9187",        job = "postgresql", db = "trade_db"},
+    {"__address__" = "postgres-exporter-payment:9187",      job = "postgresql", db = "payment_db"},
+    {"__address__" = "postgres-exporter-ai:9187",           job = "postgresql", db = "ai_db"},
+
+    // kafka-exporter
+    {"__address__" = "kafka-exporter:9308", job = "kafka"},
   ]
   scrape_interval = "30s"
   forward_to      = [prometheus.remote_write.default.receiver]
